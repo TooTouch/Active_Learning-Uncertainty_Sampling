@@ -23,8 +23,8 @@ TRAIN:
 AL: # active learning
   strategy: EntropySampling # Random, LeastConfidence, MarginSampling, EntropySampling
   start_ratio: 0.1 # start sample ratio for intial training
-  query_ratio: 0.1 # qeury sample ratio for labeling
-  end_ratio: 1.0  # end sample ratio for final training
+  query_ratio: 0.01 # qeury sample ratio for labeling
+  end_ratio: 0.3  # end sample ratio for final training
 
 RESULT:
   savedir: ./results/CIFAR10
