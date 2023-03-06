@@ -33,7 +33,11 @@ torchvision
 
 # Results
 
-TBD
+**CIFAR10**
+
+<p align='center'>
+    <img src="https://github.com/TooTouch/Active_Learning-Uncertainty_Sampling/blob/main/results/CIFAR10/figure.jpg?raw=true">
+</p>
 
 
 # Reference
