@@ -33,10 +33,20 @@ torchvision
 
 # Results
 
-**CIFAR10**
+**Experiment Setting**
+- Model: ResNet18
+- Batch Size: 128
+- Optimizer: SGD
+- Learning Rate: 0.1
+- Learning Rate Scheduler: Cosine Annealing with Warm-up
+
+**Active Learning**
+- The Number of Initial Labeled Images: 5,000
+- The Number of Query Images: 500
+- The Number of Iteration: 20
 
 <p align='center'>
-    <img src="https://github.com/TooTouch/Active_Learning-Uncertainty_Sampling/blob/main/results/CIFAR10/figure.jpg?raw=true">
+    <img src="https://github.com/TooTouch/Active_Learning-Uncertainty_Sampling/blob/main/figures/uncertainty_sampling_result.jpg?raw=true">
 </p>
 
 
