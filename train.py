@@ -120,10 +120,11 @@ def test(model, dataloader, criterion, log_interval: int) -> dict:
                 
 def fit(
     model, trainloader, testloader, criterion, optimizer, scheduler, accelerator,
-    epochs: int, use_wandb: bool, log_interval: int
+    epochs: int, use_wandb: bool, log_interval: int, savedir: str = None
 ) -> None:
 
     step = 0
+    best_acc = 0
     for epoch in range(epochs):
         _logger.info(f'\nEpoch: {epoch+1}/{epochs}')
         train_metrics = train(
@@ -153,5 +154,13 @@ def fit(
             wandb.log(metrics, step=step)
 
         step += 1
+        
+        # checkpoint - save best results and model weights
+        if savedir and (best_acc < eval_metrics['acc']):
+            best_acc = eval_metrics['acc']
+            state = {'best_step':step}
+            state.update(eval_metrics)
+            json.dump(state, open(os.path.join(savedir, 'best_results.json'), 'w'), indent='\t')
+            torch.save(model.state_dict(), os.path.join(savedir, 'model.pt'))
     
     return eval_metrics

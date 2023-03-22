@@ -1,4 +1,4 @@
-EXP_NAME: Random-ResNet18-CIFAR10
+EXP_NAME: Random
 SEED: 223
 
 DATASET:
@@ -6,6 +6,7 @@ DATASET:
   dataname: CIFAR10
   num_classes: 10
   batch_size: 128
+  test_batch_size: 256
   num_workers: 12
   
 OPTIMIZER:
@@ -20,11 +21,14 @@ TRAIN:
   ckpdir: null
   use_wandb: true
 
+MODEL:
+  modelname: resnet18
+
 AL: # active learning
-  strategy: Random # Random, LeastConfidence, MarginSampling, EntropySampling
-  start_ratio: 0.1 # start sample ratio for intial training
-  query_ratio: 0.01 # qeury sample ratio for labeling
-  end_ratio: 0.3  # end sample ratio for final training
+  strategy: RandomSampling # RandomSampling, LeastConfidence, MarginSampling, EntropySampling
+  n_start: 5000 # start samples for intial training
+  n_query: 500 # qeury samples for labeling
+  n_end: 30000  # end samples for final training
 
 RESULT:
-  savedir: ./results/CIFAR10
+  savedir: ./results

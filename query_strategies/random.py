@@ -1,13 +1,27 @@
 import numpy as np
-import torch
-from .utils import extract_unlabeled_prob
+from torch.utils.data import Dataset
 
-def random_sampling(
-    model, dataloader, dataset, nb_query_samples: int, labeled_idx: np.ndarray):
-    
-    # set unlabeled index
-    unlabeled_idx = np.arange(len(dataset))[~labeled_idx]
-    np.random.shuffle(unlabeled_idx)
-    select_idx = unlabeled_idx[:nb_query_samples]
-    
-    return select_idx
+from .strategy import Strategy
+
+class RandomSampling(Strategy):
+    def __init__(
+        self, n_query: int, labeled_idx: np.ndarray, 
+        dataset: Dataset, batch_size: int, num_workers: int):
+        
+        super(RandomSampling, self).__init__(
+            n_query     = n_query, 
+            labeled_idx = labeled_idx, 
+            dataset     = dataset,
+            batch_size  = batch_size,
+            num_workers = num_workers
+        )
+        
+    def query(self, model, dataset) -> np.ndarray:
+        
+        # unlabeled index
+        unlabeled_idx = np.where(self.labeled_idx==False)[0]
+        
+        np.random.shuffle(unlabeled_idx)
+        select_idx = unlabeled_idx[:self.n_query]
+        
+        return select_idx

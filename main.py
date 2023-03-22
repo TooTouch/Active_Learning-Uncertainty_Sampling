@@ -12,7 +12,6 @@ from copy import deepcopy
 from train import fit
 from datasets import create_dataset, create_dataloader
 from models import *
-from query_strategies import dataset_sampling
 from log import setup_default_logging
 
 from accelerate import Accelerator
@@ -35,7 +34,7 @@ def torch_seed(random_seed):
 def run(cfg):
 
     # make save directory
-    savedir = os.path.join(cfg['RESULT']['savedir'], cfg['EXP_NAME'])
+    savedir = os.path.join(cfg['RESULT']['savedir'], cfg['DATASET']['dataname'], cfg['MODEL']['modelname'], cfg['EXP_NAME'])
     os.makedirs(savedir, exist_ok=True)
 
     # set accelerator
@@ -50,51 +49,58 @@ def run(cfg):
     # set device
     _logger.info('Device: {}'.format(accelerator.device))
 
-
     # load dataset
     trainset, testset = create_dataset(datadir=cfg['DATASET']['datadir'], dataname=cfg['DATASET']['dataname'])
-    
-    # load test dataloader
-    testloader = create_dataloader(
-        dataset     = testset, 
-        batch_size  = 256, 
-        shuffle     = False, 
-        num_workers = cfg['DATASET']['num_workers']
-    )
 
     # set loss function
     criterion = torch.nn.CrossEntropyLoss()
     
     # set active learning arguments
-    total_samples = len(trainset.data)
-    nb_init_samples = int(cfg['AL']['start_ratio'] * total_samples)
-    nb_query_samples = int(cfg['AL']['query_ratio'] * total_samples)
-    nb_round = int((int(cfg['AL']['end_ratio'] * total_samples) - nb_init_samples)/nb_query_samples)
+    nb_round = (cfg['AL']['n_end'] - cfg['AL']['n_start'])/cfg['AL']['n_query']
     
-    if (int(cfg['AL']['end_ratio'] * total_samples) - nb_init_samples) % nb_query_samples != 0:
-        nb_round += 1
+    if nb_round % int(nb_round) != 0:
+        nb_round = int(nb_round) + 1
+    else:
+        nb_round = int(nb_round)
     
     # logging
-    _logger.info('[total samples] {}, [initial samples] {} [qeury samples] {} [total round] {}'.format(
-        total_samples, nb_init_samples, nb_query_samples, nb_round))
+    _logger.info('[total samples] {}, [initial samples] {} [qeury samples] {} [end samples] {} [total round] {}'.format(
+        len(trainset), cfg['AL']['n_start'], cfg['AL']['n_query'], cfg['AL']['n_end'], nb_round))
     
     # inital sampling labeling
-    sample_idx = np.arange(total_samples)
+    sample_idx = np.arange(len(trainset))
     np.random.shuffle(sample_idx)
     
-    labeled_idx = np.zeros(total_samples, dtype=bool)
-    labeled_idx[sample_idx[:nb_init_samples]] = True
+    labeled_idx = np.zeros_like(sample_idx, dtype=bool)
+    labeled_idx[sample_idx[:cfg['AL']['n_start']]] = True
     
-    # load train dataloader
+    # select strategy
+    strategy = __import__('query_strategies').__dict__[cfg['AL']['strategy']](
+        n_query     = cfg['AL']['n_query'], 
+        labeled_idx = labeled_idx, 
+        dataset     = trainset,
+        batch_size  = cfg['DATASET']['batch_size'],
+        num_workers = cfg['DATASET']['num_workers']
+    )
+    
+    # define train dataloader
     trainloader = create_dataloader(
-        dataset     = dataset_sampling(dataset=trainset, sample_idx=labeled_idx), 
+        dataset     = strategy.dataset_sampling(sample_idx=labeled_idx), 
         batch_size  = cfg['DATASET']['batch_size'], 
         shuffle     = True, 
         num_workers = cfg['DATASET']['num_workers']
     )
     
+     # define test dataloader
+    testloader = create_dataloader(
+        dataset     = testset, 
+        batch_size  = cfg['DATASET']['test_batch_size'], 
+        shuffle     = False, 
+        num_workers = cfg['DATASET']['num_workers']
+    )
+    
     # load init model
-    model_init = ResNet18(num_classes=cfg['DATASET']['num_classes']) 
+    model_init = __import__('models').__dict__[cfg['MODEL']['modelname']](num_classes=cfg['DATASET']['num_classes']) 
     _logger.info('# of params: {}'.format(np.sum([p.numel() for p in model_init.parameters()])))
     
     # define log df
@@ -104,24 +110,11 @@ def run(cfg):
     
     # run
     for r in range(nb_round+1):
-        # query sampling
-        if r != 0:
-            query_idx = __import__('query_strategies').__dict__[cfg['AL']['strategy']](
-                model            = model, 
-                dataloader       = trainloader,
-                dataset          = trainset,
-                nb_query_samples = nb_query_samples,
-                labeled_idx      = labeled_idx
-            )
-            
-            labeled_idx[query_idx] = True
-
-            trainloader = create_dataloader(
-                dataset     = dataset_sampling(dataset=trainset, sample_idx=labeled_idx), 
-                batch_size  = cfg['DATASET']['batch_size'], 
-                shuffle     = True, 
-                num_workers = cfg['DATASET']['num_workers']
-            )
+        
+        if r != 0:    
+            # query sampling    
+            query_idx = strategy.query(model)
+            trainloader = strategy.update(query_idx)
             
         # logging
         _logger.info('[Round {}/{}] training samples: {}'.format(r, nb_round, len(trainloader.dataset)))
@@ -142,7 +135,7 @@ def run(cfg):
         
         # initialize wandb
         if cfg['TRAIN']['use_wandb']:
-            wandb.init(name=cfg['EXP_NAME']+f'_round{r}', project='Active Learning - Uncertainty Sampling', config=cfg)        
+            wandb.init(name=cfg['EXP_NAME']+f'_round{r}', project='Active Learning - Benchmark', config=cfg)        
 
         # fitting model
         test_results = fit(
@@ -165,7 +158,7 @@ def run(cfg):
         }, ignore_index=True)
         
         log_df.to_csv(
-            os.path.join(savedir, f'total_{total_samples}-init_{nb_init_samples}-query_{nb_query_samples}-round_{nb_round}.csv'),
+            os.path.join(savedir, f"total_{len(trainset)}-init_{cfg['AL']['n_start']}-query_{cfg['AL']['n_query']}-round_{nb_round}.csv"),
             index=False
         )    
         
@@ -175,7 +168,7 @@ def run(cfg):
     
 
 if __name__=='__main__':
-    parser = argparse.ArgumentParser(description='Active Learning - Uncertainty Sampling')
+    parser = argparse.ArgumentParser(description='Active Learning - Benchmark')
     parser.add_argument('--yaml_config', type=str, default=None, help='exp config file')    
 
     args = parser.parse_args()
